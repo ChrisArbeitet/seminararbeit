@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VS Code
+.vscode/
+
+# Cache
+.cache/
+*.pickle
+*.pkl
+
+.DS_Store
+
+# Result and test folders
+results_data/
+test_factory/
+data/
+*.png
+logs/
