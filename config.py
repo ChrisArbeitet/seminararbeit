@@ -1,3 +1,5 @@
+from pathlib import Path
+
 """
     File provides an overview of all necessary file paths and hyperparameters required to configure
     and run the genetic algorithm.
@@ -20,6 +22,13 @@ exp_knowledge = "Expert_knowledge.xlsx"
 
 # Tags table to map evaluations to features
 tags_table = "240722_TAGS_Tabelle.csv"
+
+#project folder
+BASE_DIR = Path(__file__).parent
+
+EXCEL_PATH = BASE_DIR / "algorithms" / "Beste-Features.xlsx"
+OUTPUT_DIR = BASE_DIR / "output"
+DATA_DIR = BASE_DIR / "data"
 
 
 """

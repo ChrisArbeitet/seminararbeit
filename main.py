@@ -1,6 +1,15 @@
 """
     Entry point for the genetic algorithm.
     Supports single runs and batch runs from an Excel table.
+
+    Usage:
+        Single run:  python main.py --mode single [--seed 42] [--label my_run]
+        Batch mode:  python main.py --mode batch [--excel path/to/Beste-Features.xlsx]
+
+    Note:
+        In single run mode, all hyperparameters (target, regression, GA settings,
+        island model settings, etc.) are read directly from config.py.
+        Only the random seed and an optional run label can be passed via CLI.
 """
 
 import matplotlib
@@ -10,7 +19,7 @@ import numpy as np
 import random
 import config
 import timeit
-import sys
+import argparse
 from pathlib import Path
 from datetime import datetime
 from data_processing import data_processor
@@ -21,7 +30,7 @@ import xlsxwriter
 import traceback
 
 
-# ── MAPPING-TABELLEN ──────────────────────────────────────────────────────────
+# ── MAPPING-Tables ──────────────────────────────────────────────────────────
 TARGET_MAP = {
     'IB':      ['IB_AVG'],
     'Density': ['DENSITY_AVG'],
@@ -41,11 +50,10 @@ CXPB_MUTPB_MAP = {
 }
 
 
-# ── CONFIG SICHER ÜBERSCHREIBEN ───────────────────────────────────────────────
+# ── overwrite config (Batch only) ────────────────────────────────────────────
 def apply_config(targets, regression, rule_type, seeds):
     cxpb, mutpb = CXPB_MUTPB_MAP[rule_type]
 
-    # ✅ Direkt Attribute setzen – kein importlib.reload(), kein Schreiben auf Disk
     config.targets    = targets
     config.regression = [regression]
     config.rule_type  = rule_type
@@ -53,15 +61,20 @@ def apply_config(targets, regression, rule_type, seeds):
     config.mutpb      = mutpb
     config.seeds      = seeds
 
-    print(f"  config aktualisiert:")
+    print(f"  config updated:")
     print(f"    targets={config.targets}")
     print(f"    regression={config.regression}")
     print(f"    rule_type={config.rule_type}")
     print(f"    cxpb={config.cxpb}, mutpb={config.mutpb}")
 
 
-# ── EINZELLAUF ────────────────────────────────────────────────────────────────
+# ── single run ───────────────────────────────────────────────────────────────
 def main(seeds, run_label=None):
+    """
+    Executes the GA for a single run.
+    All hyperparameters are read from config.py.
+    Seeds and run_label can be passed directly.
+    """
     if len(seeds) < config.validation_runs:
         raise ValueError("Not enough seeds defined.")
 
@@ -74,7 +87,7 @@ def main(seeds, run_label=None):
         if not results_file_path.exists():
             workbook = xlsxwriter.Workbook(str(results_file_path))
             workbook.add_worksheet()
-            workbook.close()  # ✅ Klammern ergänzt
+            workbook.close()
 
         for i, target in enumerate(config.targets):
             print(f"\nRunning validation run {validation_run + 1} for target: {target}")
@@ -104,15 +117,15 @@ def main(seeds, run_label=None):
             )
 
 
-# ── BATCH-MODUS ───────────────────────────────────────────────────────────────
+# ── BATCH-MODE ───────────────────────────────────────────────────────────────
 def run_batch(excel_path="Beste-Features.xlsx"):
     df_runs = pd.read_excel(excel_path, sheet_name="Tabelle1", engine="calamine")
     total   = len(df_runs)
     errors  = []
 
     print(f"{'='*60}")
-    print(f"Batch-Modus gestartet: {total} Durchläufe")
-    print(f"Quelle: {excel_path}")
+    print(f"Batch mode started: {total} runs")
+    print(f"Source: {excel_path}")
     print(f"{'='*60}\n")
 
     for run_idx, row in df_runs.iterrows():
@@ -142,25 +155,101 @@ def run_batch(excel_path="Beste-Features.xlsx"):
                 seeds      = seeds,
             )
             main(seeds=seeds, run_label=run_label)
-            print(f"\n✅  {run_label} abgeschlossen.")
+            print(f"\n  {run_label} completed.")
 
         except Exception as e:
             traceback.print_exc()
-            print(f"Fehler bei {run_label}: {e}")
+            print(f"Error in {run_label}: {e}")
             errors.append({"run": run_label, "error": str(e)})
             with open("batch_errors.log", "a") as f:
                 f.write(f"{datetime.now()} | {run_label} | {e}\n")
             continue
 
     print(f"\n{'='*60}")
-    print(f"Batch abgeschlossen: {total - len(errors)}/{total} erfolgreich")
+    print(f"Batch completed: {total - len(errors)}/{total} successful")
     if errors:
-        print(f"\nFehlgeschlagene Läufe ({len(errors)}):")
+        print(f"\nFailed runs ({len(errors)}):")
         for err in errors:
             print(f"  • {err['run']}: {err['error']}")
     print(f"{'='*60}")
 
 
-# ── EINSTIEG ──────────────────────────────────────────────────────────────────
+# ── ARGUMENT PARSER ──────────────────────────────────────────────────────────
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Genetic Algorithm Feature Selection for Particleboard Quality Prediction",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument(
+        '--mode',
+        choices=['single', 'batch'],
+        required=True,
+        help=(
+            "Execution mode:\n"
+            "  single  → run the GA once using all settings from config.py\n"
+            "  batch   → run multiple configurations from an Excel file"
+        )
+    )
+
+    # ── Single-run arguments ─────────────────────────────────────────────────
+    single_group = parser.add_argument_group(
+        'Single Run Options',
+        'Only used with --mode single. All other settings are read from config.py.'
+    )
+
+    single_group.add_argument(
+        '--seed',
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)"
+    )
+    single_group.add_argument(
+        '--label',
+        type=str,
+        default=None,
+        help="Optional label for the results folder (default: auto-generated from config)"
+    )
+
+    # ── Batch-mode arguments ─────────────────────────────────────────────────
+    batch_group = parser.add_argument_group(
+        'Batch Mode Options',
+        'Only used with --mode batch.'
+    )
+
+    batch_group.add_argument(
+        '--excel',
+        type=str,
+        default=None,
+        help="Path to the Excel file with batch run configurations\n(default: algorithms/Beste-Features.xlsx)"
+    )
+
+    return parser.parse_args()
+
+
+# ── ENTRY POINT ──────────────────────────────────────────────────────────────
 if __name__ == '__main__':
-    run_batch(excel_path=r"C:\Users\wiwi\PycharmProjects\seminararbeit\algorithms\Beste-Features.xlsx")
+    BASE_DIR = Path(__file__).parent
+    args     = parse_args()
+
+    if args.mode == 'batch':
+        excel_path = Path(args.excel) if args.excel else BASE_DIR / "algorithms" / "Beste-Features.xlsx"
+        run_batch(excel_path=excel_path)
+
+    elif args.mode == 'single':
+        # All hyperparameters come from config.py
+        # Seeds are built from the CLI seed for each target and validation run
+        seeds      = [[args.seed] * len(config.targets)] * config.validation_runs
+        run_label  = args.label or f"single_{'_'.join(config.targets)}_Seed{args.seed}"
+
+        print(f"{'='*60}")
+        print(f"Single run started")
+        print(f"  target(s)    : {config.targets}")
+        print(f"  regression   : {config.regression}")
+        print(f"  rule_type    : {config.rule_type}")
+        print(f"  seed         : {args.seed}")
+        print(f"  run_label    : {run_label}")
+        print(f"  All other hyperparameters are read from config.py")
+        print(f"{'='*60}\n")
+
+        main(seeds=seeds, run_label=run_label)

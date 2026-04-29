@@ -126,7 +126,6 @@ class DataProcessor:
     def load_mutation_rules(self):
         mutation_rules_path = os.path.join(config.data_base_path, config.exp_knowledge)
         tags_table_path = os.path.join(config.data_base_path, config.tags_table)
-        # ✅ safe_read_excel statt pd.read_excel
         df_mutation_rules = safe_read_excel(mutation_rules_path, sheet_name='Bewertungen')
         df_tags_table = pd.read_csv(tags_table_path, sep=';', usecols=['NAME', 'LANGUAGE_1'], header=0, encoding='latin1')
         merged_df = pd.merge(df_tags_table, df_mutation_rules, on='LANGUAGE_1', how='inner')
